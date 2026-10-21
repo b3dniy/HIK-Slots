@@ -7,254 +7,230 @@
 <h1 align="center">HIK-Slots</h1>
 
 <p align="center">
-  <b>Move cameras between Hikvision NVR slots, audit every camera and fix what is wrong — from the terminal.</b><br>
-  <sub>Перестановка камер по слотам регистратора Hikvision, проверка и исправление камер — прямо из терминала.</sub>
+  Camera slot management and camera checks for Hikvision NVRs.<br>
+  <sub>Перестановка камер по слотам и проверка камер на регистраторах Hikvision.</sub>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white">
   <img src="https://img.shields.io/badge/python-3.x-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img src="https://img.shields.io/badge/single-.exe%20(no%20install)-2ea44f?style=flat-square">
   <img src="https://img.shields.io/badge/API-Hikvision%20ISAPI-FFC20E?style=flat-square">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square">
 </p>
 
 <p align="center">
-  <a href="#english"><img src="https://img.shields.io/badge/🇬🇧%20Read%20in-English-2ea44f?style=for-the-badge"></a>
-  &nbsp;
-  <a href="#russian"><img src="https://img.shields.io/badge/🇷🇺%20Читать%20на-Русском-1f6feb?style=for-the-badge"></a>
+  <a href="#english">English</a> · <a href="#russian">Русский</a>
 </p>
 
 ---
 
 <a id="english"></a>
 
-## 🇬🇧 English
+## English
 
-When a camera is added to a Hikvision NVR it lands in the **first free slot**, not where you want it.
-Moving it by hand means shifting every camera in between, re-typing names and re-checking recording
-on each one. **HIK-Slots** does it in one step over **ISAPI**: the camera moves to the slot you pick,
-and its **name, recording schedule, event linkage and arming schedules move with it**.
+A Hikvision NVR always puts a newly added camera into the first free slot. To get it into a specific
+slot by hand you have to shift every camera in between and then restore names and recording settings.
+HIK-Slots does this over ISAPI in one operation. It also checks all cameras and can fix common problems
+on a single camera.
 
-It also **audits every camera** (online, recording, motion detection, audio) and can **fix a single
-camera** — wrong password, motion recording that never fires, empty schedules, a camera that does not
-notify the NVR about motion — or reboot it.
+### Menu
 
-Same style as [HIK-Report](https://github.com/b3dniy/HIK-Report): a single `.exe`, rainbow progress
-bar, blinking SUCCESS / ERROR badges, recorders stored inside the `.exe`, reports in Excel.
-
-### 🧭 Menu
-
-| | |
+| Item | What it does |
 |---|---|
-| **Cameras** | |
-| 1. Camera list | all slots, online status, free slots |
-| 2. Check all cameras | online, recording, archive, motion detection, audio, disks → Excel |
-| 3. Check & fix one camera | only problem cameras are listed → detailed audit → pick what to fix, or reboot |
-| **Moving** | |
-| 4. Move a camera to another slot | to a free slot, or onto an occupied one — **replace** or **swap** |
-| 5. Move with shift | `D115 → D50`: cameras in between shift by one, up to the first free slot |
-| 6. Swap two cameras | only two channels are touched |
-| 7. Undo a move | pick one of the recent moves and restore everything as it was |
+| 1. Camera list | All slots with online status and free slots |
+| 2. Check all cameras | Online status, recording, archive, motion detection, audio, disks. Saves an Excel report |
+| 3. Check and fix one camera | Lists only cameras with problems, runs a detailed check of the selected one and offers fixes or a reboot |
+| 4. Move a camera to another slot | To a free slot, or to an occupied one with replace or swap |
+| 5. Move with shift | For example `D115 → D50`: the cameras in between move up by one slot, up to the first free slot |
+| 6. Swap two cameras | Only the two channels are changed |
+| 7. Undo a move | Restores one of the recent moves |
 
-### ✨ Moving cameras
+### Moving cameras
 
-- 🏷️ **Everything follows the camera** — name, recording schedule, event linkage (including
-  cross-links like “motion on D10 records D60”), arming schedules.
-- 🔗 **No channel is ever deleted mid-way.** The NVR refuses the same camera in two slots, and many
-  firmwares can only add a camera to the first free slot. HIK-Slots parks a placeholder (non-existent
-  IP) in the slot instead, writes cameras by *editing* channels, and fills an empty slot by briefly
-  occupying the free slots below it. Each camera is offline only for 10–30 s.
-- 🔑 **Camera passwords are checked on the camera itself before anything changes** (one attempt, so
-  the account is not locked). Cameras with a different password are asked for individually.
-- 👀 **The plan is shown first** — nothing changes until you confirm with `Y` / `Enter`.
-- 💾 **Snapshot and step journal** before every change: an interrupted move can be resumed or undone
-  on the next start; leftover placeholders are cleaned up.
-- 🗺️ **Relocation map** in Excel — where each camera is now and **in which old slot its earlier
-  archive is** (archive stays with the slot, that is how NVRs work).
+The camera keeps its name, recording schedule, event linkage and arming schedules in the new slot.
+Cross-links are updated too, so if motion on D10 started recording on D60, it will point to the new slot.
 
-### 🩺 Checking & fixing cameras
+Channels are not deleted during a move. The NVR does not allow the same camera in two slots, and some
+firmware adds a camera only to the first free slot. The program writes a temporary channel with a
+non-existent IP into the slot instead, and fills empty slots below the target for a few seconds when it
+needs to add a camera to an empty slot. Each camera is offline for about 10–30 seconds.
 
-**Check all cameras** — online status, recording schedule, whether the archive actually grows
-(coverage for continuous recording, number of recordings for motion), motion detection on / zone /
-sensitivity, “motion recording but motion linkage has no record”, arming schedule, audio, codec,
-default names, duplicate cameras, disks. Cameras switched off on purpose can be marked once and are no
-longer counted as errors.
+Before anything is changed:
 
-**Check & fix one camera** — detailed audit, including what can only be seen **on the camera itself**
-(does it notify the NVR about motion) and when the camera last recorded (up to 30 days back).
-Fixes on offer:
+- the plan is shown and has to be confirmed;
+- the camera password is checked by logging in to the camera once;
+- a snapshot of the settings and a step journal are saved, so an interrupted move can be resumed or undone.
+
+The recording archive stays in the old slot. The Excel move report lists where each camera was before,
+so older footage can be found.
+
+### Checking and fixing a camera
+
+Item 3 checks the camera through the NVR and directly on the camera, and shows when it last recorded
+(up to 30 days back). It can fix:
 
 | Problem | Fix |
 |---|---|
-| Wrong camera password | enter the password (checked on the camera) |
-| Factory name (`IPCamera 22`) | set a name |
-| Recording schedule off / empty / partial | copy from another camera |
-| Motion linkage without recording | add recording of the channel |
-| Motion detection off · no zone · sensitivity 0 | enable · whole frame · 50 |
-| Empty arming schedule | 24/7 |
-| Camera does not notify the NVR about motion | enable “Notify Surveillance Center” on the camera |
-| Audio off | enable in the main stream |
-| Continuous recording but archive is not growing | reconnect the camera |
-| — | **reboot the camera** (always available, never part of “fix all”) |
+| Wrong camera password | Enter the password, it is checked on the camera |
+| Default name (`IPCamera 22`) | Set a name |
+| Recording schedule off, empty or not 24/7 | Copy it from another camera |
+| Motion event does not start recording | Add recording to the motion linkage |
+| Motion detection off, no detection area, sensitivity 0 | Enable, full frame, sensitivity 50 |
+| Empty arming schedule | Set to 24/7 |
+| Camera does not notify the NVR about motion | Enable "Notify Surveillance Center" on the camera |
+| Audio off | Enable audio in the main stream |
+| Continuous recording but the archive is not growing | Reconnect the camera |
 
-The audit repeats after the fixes; original settings are saved to `HIK-Slots_backup`.
+A reboot is always available. After the fixes the check runs again. The original settings are saved
+to `HIK-Slots_backup`.
 
-### 🚀 Quick start
+Cameras that are switched off on purpose can be marked after the check in item 2 and are no longer
+reported as errors.
 
-1. Run **`HIK-Slots.exe`** (SmartScreen → *More info → Run anyway* — the file is unsigned).
-2. Press **`0`** → add a recorder (internal IP + port, optional external host + port).
-3. Pick the recorder, enter the NVR login and password, choose a menu item.
+### Getting started
 
-Reports (`.xlsx`) and the `HIK-Slots_backup` folder (journals, original settings) are created
-**next to the program**. Keep the folder: it is what *Undo a move* uses.
+1. Run `HIK-Slots.exe`. Windows SmartScreen may warn about an unknown publisher: More info → Run anyway.
+2. Press `0` and add a recorder: internal IP and port, and optionally an external address and port.
+3. Select the recorder and log in with the NVR account.
 
-### 🔄 Updates
+Reports and the `HIK-Slots_backup` folder are created next to the program. Do not delete the folder:
+it is needed to undo moves.
 
-On every start the program first checks GitHub for a newer version — the latest **Release** with
-`HIK-Slots.exe` attached, and the `VERSION` line in **`main`** (taking whichever is newer). If there is
-one, it downloads it, runs the new file's self-test, moves your recorder settings into it, replaces
-the `.exe` and restarts. Without internet access it simply starts the current version.
+### Updates
 
-**Publishing an update:** raise `VERSION` in `nvr_slots.py`, rebuild `HIK-Slots.exe`, commit and
-push to `main` — or create a Release tagged `v<version>` with `HIK-Slots.exe` attached.
+On start the program checks GitHub for a newer version: the latest release with `HIK-Slots.exe`
+attached and the `VERSION` line in `main`. A newer version is downloaded, checked with its self-test,
+given the saved recorder list, and started in place of the old one. Without internet access the
+current version starts as usual.
 
-### 🛠️ Build from source
+To publish an update, increase `VERSION` in `nvr_slots.py`, rebuild `HIK-Slots.exe` and push it to
+`main`, or create a release `v<version>` with the exe attached.
+
+### Building
 
 ```bash
 pip install requests openpyxl colorama pyinstaller
 pyinstaller --onefile --console --name "HIK-Slots" --icon hik.ico nvr_slots.py
 ```
 
-The script also runs directly: `python nvr_slots.py` (or `Запуск.bat`).
-`dev/` contains an NVR emulator (`python dev/mock_nvr.py`) and an end-to-end test suite
-(`python dev/test_against_mock.py`) — everything can be developed without real hardware.
+The script can also be run with `python nvr_slots.py` or `Запуск.bat`.
+`dev/` contains an NVR emulator (`python dev/mock_nvr.py`) and tests (`python dev/test_against_mock.py`).
 
-### 🔒 Security
+### Security
 
-- No addresses in the code — recorders are added at runtime.
-- NVR and camera passwords are kept **in memory only** — never written to disk, journals or reports.
-- Use only on systems you own or are authorised to administer.
+- The code contains no addresses. Recorders are added in the settings.
+- NVR and camera passwords are kept in memory only and are not written to disk, journals or reports.
+- Use the program only on systems you are allowed to administer.
 
-### 📜 License
+### License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
-<p align="right"><a href="#top">↑ back to top</a></p>
+<p align="right"><a href="#top">↑ top</a></p>
 
 ---
 
 <a id="russian"></a>
 
-## 🇷🇺 Русский
+## Русский
 
-При добавлении на регистратор Hikvision камера встаёт в **первый свободный слот**, а не туда, куда
-нужно. Переставить её вручную — значит сдвинуть все камеры между слотами, заново вписать имена и
-проверить запись у каждой. **HIK-Slots** делает это одним действием по **ISAPI**: камера переезжает
-в выбранный слот, а её **имя, расписание записи, связки событий и графики охраны — вместе с ней**.
+Регистратор Hikvision ставит новую камеру в первый свободный слот. Чтобы перенести её в нужный слот
+вручную, приходится сдвигать все камеры между ними, а потом заново настраивать имена и запись.
+HIK-Slots делает это одной операцией через ISAPI. Кроме того, программа проверяет все камеры и умеет
+исправлять типичные проблемы на отдельной камере.
 
-Ещё программа **проверяет все камеры** (связь, запись, детекция движения, звук) и умеет **исправить
-одну камеру** — неверный пароль, запись по движению, которая не срабатывает, пустые графики, камера,
-которая не сообщает регистратору о движении — или перезагрузить её.
+### Меню
 
-Стиль — как у [HIK-Report](https://github.com/b3dniy/HIK-Report): один `.exe`, радужный
-прогресс-бар, мигающие бейджи SUCCESS / ERROR, регистраторы внутри `.exe`, отчёты в Excel.
-
-### 🧭 Меню
-
-| | |
+| Пункт | Что делает |
 |---|---|
-| **Камеры** | |
-| 1. Список камер | все слоты, связь, свободные слоты |
-| 2. Проверить все камеры | связь, запись, архив, детекция движения, звук, диски → Excel |
-| 3. Проверить и исправить одну камеру | в списке только проблемные → подробный аудит → что исправить или перезагрузка |
-| **Перестановка** | |
-| 4. Перенести камеру в другой слот | в свободный — или на занятый: **замена** или **обмен** |
-| 5. Перенести камеру со сдвигом остальных | `D115 → D50`: камеры между ними сдвигаются на один, до первого свободного слота |
-| 6. Поменять две камеры местами | меняются только два канала |
-| 7. Отменить перестановку | выбор из последних перестановок, всё возвращается как было |
+| 1. Список камер | Все слоты, связь, свободные слоты |
+| 2. Проверить все камеры | Связь, запись, архив, детекция движения, звук, диски. Сохраняет отчёт в Excel |
+| 3. Проверить и исправить одну камеру | Показывает только камеры с проблемами, подробно проверяет выбранную и предлагает исправления или перезагрузку |
+| 4. Перенести камеру в другой слот | В свободный слот или в занятый с заменой либо обменом |
+| 5. Перенести камеру со сдвигом остальных | Например `D115 → D50`: камеры между ними сдвигаются на один слот, до первого свободного |
+| 6. Поменять две камеры местами | Меняются только два канала |
+| 7. Отменить перестановку | Возвращает одну из последних перестановок |
 
-### ✨ Перестановка
+### Перестановка
 
-- 🏷️ **Всё едет за камерой** — имя, расписание записи, связки событий (в том числе перекрёстные:
-  «движение на D10 включает запись D60»), графики охраны.
-- 🔗 **Каналы по ходу не удаляются.** Регистратор не пускает одну камеру в два слота, а многие
-  прошивки добавляют камеру только в первый свободный слот. Поэтому HIK-Slots ставит в слот временную
-  заглушку (несуществующий IP), записывает камеры *изменением* канала, а пустой слот занимает,
-  на секунды заполнив свободные слоты ниже него. Каждая камера офлайн всего 10–30 сек.
-- 🔑 **Пароль камер проверяется на самой камере до любых изменений** (одна попытка, чтобы не
-  заблокировать учётку). У камер с другим паролем он спрашивается отдельно.
-- 👀 **Сначала план** — ничего не меняется, пока не подтвердите `Y` / `Enter`.
-- 💾 **Снимок и журнал шагов** перед каждым изменением: прерванную перестановку при следующем запуске
-  можно продолжить или отменить; оставшиеся заглушки убираются.
-- 🗺️ **Карта переезда** в Excel — где теперь каждая камера и **в каком старом слоте её прежний архив**
-  (архив привязан к слоту — так устроены регистраторы).
+В новом слоте у камеры сохраняются имя, расписание записи, связки событий и графики охраны.
+Перекрёстные связки тоже обновляются: если движение на D10 включало запись D60, связка будет указывать
+на новый слот.
 
-### 🩺 Проверка и исправление камер
+Каналы во время перестановки не удаляются. Регистратор не даёт поставить одну камеру в два слота, а
+некоторые прошивки добавляют камеру только в первый свободный слот. Поэтому программа временно
+записывает в слот канал с несуществующим IP, а если камеру нужно поставить в пустой слот, на несколько
+секунд занимает свободные слоты ниже него. Каждая камера бывает офлайн примерно 10–30 секунд.
 
-**Проверить все камеры** — связь, расписание записи, пополняется ли архив на самом деле (покрытие для
-постоянной записи, число записей — для записи по движению), детекция движения (включена / зона /
-чувствительность), «пишет по движению, но в связке движения нет записи», график охраны, звук, кодек,
-заводские имена, дубли камер, диски. Камеры, выключенные специально, можно один раз отметить —
-ошибкой они больше не считаются.
+Перед изменениями:
 
-**Проверить и исправить одну камеру** — подробный аудит, в том числе того, что видно **только в самой
-камере** (сообщает ли она регистратору о движении), и когда камера писала в последний раз (до 30 дней
-назад). Что можно исправить:
+- показывается план, его нужно подтвердить;
+- пароль камер проверяется одним входом на камеру;
+- сохраняются снимок настроек и журнал шагов, поэтому прерванную перестановку можно продолжить или отменить.
+
+Архив записей остаётся в старом слоте. В отчёте о перестановке (Excel) указано, где камера стояла
+раньше, по нему можно найти старые записи.
+
+### Проверка и исправление камеры
+
+Пункт 3 проверяет камеру через регистратор и напрямую на камере и показывает, когда она писала в
+последний раз (до 30 дней назад). Что можно исправить:
 
 | Проблема | Исправление |
 |---|---|
-| Неверный пароль камеры | ввести пароль (проверяется на камере) |
-| Заводское имя (`IPCamera 22`) | задать имя |
-| Расписание записи выключено / пустое / не круглосуточное | скопировать с другой камеры |
-| В связке движения нет записи канала | добавить запись канала |
-| Детекция выключена · зона не нарисована · чувствительность 0 | включить · весь кадр · 50 |
-| Пустой график охраны | круглосуточно |
-| Камера не сообщает регистратору о движении | включить в камере «Уведомить центр наблюдения» |
-| Звук выключен | включить в основном потоке |
-| Постоянная запись, но архив не пополняется | переподключить камеру |
-| — | **перезагрузить камеру** (доступно всегда, в «исправить всё» не входит) |
+| Неверный пароль камеры | Ввести пароль, он проверяется на камере |
+| Заводское имя (`IPCamera 22`) | Задать имя |
+| Расписание записи выключено, пустое или не круглосуточное | Скопировать с другой камеры |
+| Движение не включает запись | Добавить запись в связку движения |
+| Детекция выключена, нет зоны, чувствительность 0 | Включить, весь кадр, чувствительность 50 |
+| Пустой график охраны | Сделать круглосуточным |
+| Камера не сообщает регистратору о движении | Включить в камере «Уведомить центр наблюдения» |
+| Звук выключен | Включить звук в основном потоке |
+| Постоянная запись, но архив не пополняется | Переподключить камеру |
 
-После исправлений аудит повторяется; исходные настройки сохраняются в `HIK-Slots_backup`.
+Перезагрузка камеры доступна всегда. После исправлений проверка повторяется. Исходные настройки
+сохраняются в `HIK-Slots_backup`.
 
-### 🚀 Быстрый старт
+Камеры, выключенные специально, можно отметить после проверки в пункте 2, и они больше не считаются
+ошибкой.
 
-1. Запустите **`HIK-Slots.exe`** (SmartScreen → *Подробнее → Выполнить в любом случае* — файл без подписи).
-2. Нажмите **`0`** → добавьте регистратор (внутренний IP + порт, при необходимости внешний).
-3. Выберите регистратор, введите логин и пароль, выберите пункт меню.
+### Начало работы
 
-Отчёты (`.xlsx`) и папка `HIK-Slots_backup` (журналы, исходные настройки) создаются **рядом с
-программой**. Папку не удаляйте — по ней работает «Отменить перестановку».
+1. Запустите `HIK-Slots.exe`. Windows SmartScreen может предупредить о неизвестном издателе:
+   «Подробнее» → «Выполнить в любом случае».
+2. Нажмите `0` и добавьте регистратор: внутренний IP и порт, при необходимости внешний адрес и порт.
+3. Выберите регистратор и войдите под учётной записью регистратора.
 
-### 🔄 Обновления
+Отчёты и папка `HIK-Slots_backup` создаются рядом с программой. Папку не удаляйте, она нужна для
+отмены перестановок.
 
-При каждом запуске программа первым делом проверяет GitHub: последний **Release** с приложенным
-`HIK-Slots.exe` и строку `VERSION` в ветке **`main`** (берётся более новая). Если есть новая версия —
-скачивает её, запускает самопроверку нового файла, переносит в него ваши регистраторы, подменяет
-`.exe` и перезапускается. Без интернета просто запускается текущая версия.
+### Обновления
 
-**Как выпустить обновление:** увеличить `VERSION` в `nvr_slots.py`, пересобрать `HIK-Slots.exe`,
-закоммитить и отправить в `main` — или создать Release с тегом `v<версия>` и приложить `HIK-Slots.exe`.
+При запуске программа проверяет на GitHub последний релиз с приложенным `HIK-Slots.exe` и строку
+`VERSION` в ветке `main`. Если есть версия новее, она скачивается, проходит самопроверку, получает
+сохранённый список регистраторов и запускается вместо старой. Без интернета запускается текущая версия.
 
-### 🛠️ Сборка из исходников
+Чтобы выпустить обновление, увеличьте `VERSION` в `nvr_slots.py`, пересоберите `HIK-Slots.exe` и
+отправьте в `main` или создайте релиз `v<версия>` с приложенным exe.
+
+### Сборка
 
 ```bash
 pip install requests openpyxl colorama pyinstaller
 pyinstaller --onefile --console --name "HIK-Slots" --icon hik.ico nvr_slots.py
 ```
 
-Скрипт можно запускать и напрямую: `python nvr_slots.py` (или `Запуск.bat`).
-В `dev/` — эмулятор регистратора (`python dev/mock_nvr.py`) и сквозные тесты
-(`python dev/test_against_mock.py`): всё можно разрабатывать без настоящего железа.
+Скрипт можно запускать и напрямую: `python nvr_slots.py` или `Запуск.bat`.
+В `dev/` лежат эмулятор регистратора (`python dev/mock_nvr.py`) и тесты (`python dev/test_against_mock.py`).
 
-### 🔒 Безопасность
+### Безопасность
 
-- Никаких адресов в коде — регистраторы добавляются при запуске.
-- Пароли регистратора и камер живут **только в памяти** — не пишутся ни на диск, ни в журналы, ни в отчёты.
-- Используйте только на системах, которыми владеете или имеете право администрировать.
+- В коде нет адресов, регистраторы добавляются в настройках.
+- Пароли регистратора и камер хранятся только в памяти и не пишутся на диск, в журналы и отчёты.
+- Используйте программу только на системах, которые вам разрешено администрировать.
 
-### 📜 Лицензия
+### Лицензия
 
-MIT — см. [`LICENSE`](LICENSE).
+MIT, см. [LICENSE](LICENSE).
 
 <p align="right"><a href="#top">↑ наверх</a></p>
