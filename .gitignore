@@ -1,0 +1,9 @@
+# сборка
+build/
+dist/
+*.spec
+__pycache__/
+
+# рабочие файлы программы (журналы, отчёты)
+HIK-Slots_backup/
+*.xlsx
