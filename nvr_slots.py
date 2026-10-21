@@ -65,6 +65,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+# Версия программы. Обновление при запуске сравнивает её с последним
+# Release на GitHub и с этой же строкой в ветке main — берётся более новая.
+VERSION = "1.1.0"
+REPO = "b3dniy/HIK-Slots"
+
 def _enable_vt():
     """Включает ANSI/VT в консоли Windows (для 24-битного цвета). True если ок."""
     if os.name != "nt":
@@ -3828,7 +3833,7 @@ def main():
     cls()
     try:
         import ctypes
-        ctypes.windll.kernel32.SetConsoleTitleW("HIK-Slots")
+        ctypes.windll.kernel32.SetConsoleTitleW(f"HIK-Slots {VERSION}")
     except Exception:
         pass
     banner("HIK-Slots — камеры по слотам (Hikvision NVR)")
@@ -3877,6 +3882,194 @@ def main():
             print(Fore.RED + f"\n  Ошибка: {e}" + Style.RESET_ALL)
             CON.add_badge("✗  ERROR", ok=False)
         press_any()
+
+
+# ------------------------------------------------------------------ #
+#  Обновление с GitHub (при запуске)
+# ------------------------------------------------------------------ #
+UPDATE_TIMEOUT = 4
+
+
+def _update_urls():
+    """Адреса GitHub (HIKSLOTS_UPDATE_SRC подменяет их — для проверки обновления)."""
+    src = os.environ.get("HIKSLOTS_UPDATE_SRC", "").rstrip("/")
+    if src:
+        return f"{src}/repos/{REPO}/releases/latest", f"{src}/{REPO}/main/"
+    return (f"https://api.github.com/repos/{REPO}/releases/latest",
+            f"https://raw.githubusercontent.com/{REPO}/main/")
+
+
+def _ver(s):
+    return tuple(int(x) for x in re.findall(r"\d+", s or "")[:4])
+
+
+def find_update():
+    """(версия, url) самой новой версии на GitHub или None.
+    exe: последний Release с приложенным .exe или exe из ветки main;
+    запуск скриптом: nvr_slots.py из main."""
+    api, raw = _update_urls()
+    frozen = getattr(sys, "frozen", False)
+    found = []
+    if frozen:
+        try:
+            r = requests.get(api, timeout=UPDATE_TIMEOUT,
+                             headers={"Accept": "application/vnd.github+json"})
+            if r.status_code == 200:
+                j = r.json()
+                for a in j.get("assets") or []:
+                    if str(a.get("name", "")).lower().endswith(".exe"):
+                        found.append((j.get("tag_name", ""), a["browser_download_url"]))
+                        break
+        except (requests.RequestException, ValueError, KeyError):
+            pass
+    try:
+        r = requests.get(raw + "nvr_slots.py", timeout=UPDATE_TIMEOUT,
+                         headers={"Range": "bytes=0-16383"})
+        mt = re.search(r'^VERSION = "([\d.]+)"', r.text, re.M) if r.status_code in (200, 206) else None
+        if mt:
+            found.append((mt.group(1), raw + ("HIK-Slots.exe" if frozen else "nvr_slots.py")))
+    except requests.RequestException:
+        pass
+    newer = [f for f in found if _ver(f[0]) > _ver(VERSION)]
+    return max(newer, key=lambda f: _ver(f[0])) if newer else None
+
+
+def _download(url, dest, bar):
+    r = requests.get(url, stream=True, timeout=30)
+    r.raise_for_status()
+    total = int(r.headers.get("Content-Length") or 0)
+    got = 0
+    with open(dest, "wb") as f:
+        for chunk in r.iter_content(256 * 1024):
+            f.write(chunk)
+            got += len(chunk)
+            if total:
+                bar.set(got / total, f"Скачано {got // 1048576} из {total // 1048576} МБ")
+    if total and got != total:
+        raise RuntimeError("файл скачался не полностью")
+
+
+def _restart(path):
+    """Новая версия в том же окне; эта копия завершается."""
+    args = [a for a in sys.argv[1:] if a != "--no-update"]
+    cmd = [path] + args if getattr(sys, "frozen", False) else [sys.executable, path] + args
+    try:
+        CON.stop()
+    except Exception:
+        pass
+    sys.stdout.flush()
+    subprocess.Popen(cmd)
+    os._exit(0)
+
+
+def apply_exe_update(exe, url, version, bar):
+    """Скачать новый exe, проверить его самопроверкой, перенести настройки
+    регистраторов (они внутри exe, в NTFS-потоке) и поставить на место старого.
+    Работающий exe Windows переименовать даёт — так и меняем."""
+    base = exe[:-4] if exe.lower().endswith(".exe") else exe
+    new, old = base + ".new.exe", base + ".old.exe"
+    _download(url, new, bar)
+    with open(new, "rb") as f:
+        if f.read(2) != b"MZ":
+            raise RuntimeError("скачан не exe-файл")
+    bar.set(1.0, "Проверка новой версии")
+    chk = subprocess.run([new, "--selftest"], capture_output=True, timeout=180)
+    if b"SELFTEST OK" not in chk.stdout:
+        raise RuntimeError("новая версия не прошла самопроверку")
+    try:
+        with open(exe + ":hikslots", "rb") as f:
+            cfg = f.read()
+        with open(new + ":hikslots", "wb") as f:
+            f.write(cfg)
+    except OSError:
+        pass                          # настроек ещё не было
+    if os.path.exists(old):
+        os.remove(old)
+    os.rename(exe, old)
+    try:
+        os.rename(new, exe)
+    except OSError:
+        os.rename(old, exe)           # вернуть как было
+        raise
+
+
+def apply_script_update(script, url, version, bar):
+    """Запуск скриптом: новый nvr_slots.py пишется поверх старого
+    (в тот же файл — настройки в его NTFS-потоке сохраняются)."""
+    bar.set(0.3, "Скачивание")
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    text = r.content.decode("utf-8")
+    if f'VERSION = "{version}"' not in text or "def main(" not in text:
+        raise RuntimeError("скачан повреждённый файл")
+    compile(text, script, "exec")
+    with open(script, "rb") as f:
+        prev = f.read()
+    with open(script + ".old", "wb") as f:
+        f.write(prev)
+    with open(script, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+
+def check_update():
+    """Первым делом при запуске: есть новая версия — скачать и перезапуститься."""
+    bar = ProgressBar("Проверка обновлений").start()
+    upd = None
+    try:
+        upd = find_update()
+    finally:
+        bar.finish(ok=True, prefix="Проверка обновлений")
+    if not upd:
+        return
+    version, url = upd
+    version = version.lstrip("vV")
+    print(Fore.CYAN + f"  Доступна версия {version} (у вас {VERSION}) — обновляю."
+          + Style.RESET_ALL)
+    frozen = getattr(sys, "frozen", False)
+    target = sys.executable if frozen else os.path.abspath(__file__)
+    bar = ProgressBar("Обновление").start()
+    ok = False
+    try:
+        (apply_exe_update if frozen else apply_script_update)(target, url, version, bar)
+        ok = True
+    except Exception as e:
+        err = str(e)
+    finally:
+        bar.finish(ok=ok, prefix="Обновление")
+    if not ok:
+        print(Fore.YELLOW + f"  Обновить не удалось ({err}) — работаю на версии {VERSION}."
+              + Style.RESET_ALL)
+        for p in (target[:-4] + ".new.exe",) if frozen else ():
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return
+    CON.add_badge(f"✓  Обновлено до {version} — перезапуск", ok=True)
+    time.sleep(1.2)
+    _restart(target)
+
+
+def cleanup_after_update():
+    """Старый exe после обновления удаляется при следующем запуске
+    (пока старая копия работала, Windows его не отдавала)."""
+    if not getattr(sys, "frozen", False):
+        return
+    base = sys.executable[:-4]
+
+    def clean():
+        for _ in range(20):
+            left = 0
+            for p in (base + ".old.exe", base + ".new.exe"):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        left += 1
+            if not left:
+                return
+            time.sleep(1)
+    threading.Thread(target=clean, daemon=True).start()
 
 
 def selftest():
@@ -3943,6 +4136,12 @@ if __name__ == "__main__":
         selftest()
         sys.exit(0)
     try:
+        cleanup_after_update()
+        if "--no-update" not in sys.argv:
+            check_update()
+        if "--version" in sys.argv:
+            print(VERSION)
+            sys.exit(0)
         main()
     except KeyboardInterrupt:
         print(Fore.RED + "\nПрервано. Незавершённую операцию можно продолжить "

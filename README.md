@@ -109,6 +109,16 @@ The audit repeats after the fixes; original settings are saved to `HIK-Slots_bac
 Reports (`.xlsx`) and the `HIK-Slots_backup` folder (journals, original settings) are created
 **next to the program**. Keep the folder: it is what *Undo a move* uses.
 
+### 🔄 Updates
+
+On every start the program first checks GitHub for a newer version — the latest **Release** with
+`HIK-Slots.exe` attached, and the `VERSION` line in **`main`** (taking whichever is newer). If there is
+one, it downloads it, runs the new file's self-test, moves your recorder settings into it, replaces
+the `.exe` and restarts. Without internet access it simply starts the current version.
+
+**Publishing an update:** raise `VERSION` in `nvr_slots.py`, rebuild `HIK-Slots.exe`, commit and
+push to `main` — or create a Release tagged `v<version>` with `HIK-Slots.exe` attached.
+
 ### 🛠️ Build from source
 
 ```bash
@@ -215,6 +225,16 @@ MIT — see [`LICENSE`](LICENSE).
 
 Отчёты (`.xlsx`) и папка `HIK-Slots_backup` (журналы, исходные настройки) создаются **рядом с
 программой**. Папку не удаляйте — по ней работает «Отменить перестановку».
+
+### 🔄 Обновления
+
+При каждом запуске программа первым делом проверяет GitHub: последний **Release** с приложенным
+`HIK-Slots.exe` и строку `VERSION` в ветке **`main`** (берётся более новая). Если есть новая версия —
+скачивает её, запускает самопроверку нового файла, переносит в него ваши регистраторы, подменяет
+`.exe` и перезапускается. Без интернета просто запускается текущая версия.
+
+**Как выпустить обновление:** увеличить `VERSION` в `nvr_slots.py`, пересобрать `HIK-Slots.exe`,
+закоммитить и отправить в `main` — или создать Release с тегом `v<версия>` и приложить `HIK-Slots.exe`.
 
 ### 🛠️ Сборка из исходников
 
