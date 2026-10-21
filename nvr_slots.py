@@ -67,7 +67,7 @@ from openpyxl.utils import get_column_letter
 
 # Версия программы. Обновление при запуске сравнивает её с последним
 # Release на GitHub и с этой же строкой в ветке main — берётся более новая.
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 REPO = "b3dniy/HIK-Slots"
 
 def _enable_vt():
@@ -185,6 +185,10 @@ def cls():
     except Exception:
         pass
     os.system("cls" if os.name == "nt" else "clear")
+    try:
+        CON.after_clear()
+    except Exception:
+        pass
 
 
 def banner(text):
@@ -225,6 +229,10 @@ class _Console:
         self.frame = 0
         self._stop = threading.Event()
         self._thr = None
+        self.header = None      # закреплённая верхняя строка (версия)
+        self._hdr_rows = 0
+        self.pinned = False
+        self.lines = 0          # строк выведено с последней очистки экрана
 
     # ---- интерфейс потока вывода (sys.stdout) ----
     def write(self, s):
@@ -232,6 +240,12 @@ class _Console:
             return 0
         with self.lock:
             n = s.count("\n")
+            if n and self.pinned:
+                # вывод длиннее окна — снимаем закрепление, чтобы ушедшие
+                # вверх строки попадали в историю прокрутки
+                self.lines += n
+                if self.lines >= self._term_lines() - 2:
+                    self._unpin()
             if n and self.badges:
                 for b in self.badges:
                     b["off"] += n
@@ -268,8 +282,49 @@ class _Console:
 
     def _drop_scrolled(self):
         if self.badges:
-            h = self._term_lines()
+            h = self._term_lines() - (1 if self.pinned else 0)
             self.badges = [b for b in self.badges if b["off"] < h - 1]
+
+    # ---- закреплённая строка с версией ----
+    def set_header(self, text):
+        with self.lock:
+            self.header = text
+
+    def _unpin(self):
+        self.pinned = False
+        try:
+            self.real.write("\x1b7\x1b[r\x1b8")
+        except Exception:
+            pass
+
+    def _draw_header(self, full=False):
+        """Строка 1 не прокручивается: область прокрутки — со 2-й строки."""
+        if not self.header or not TRUECOLOR or not self.pinned:
+            return
+        h = self._term_lines()
+        out = "\x1b7"
+        if full or h != self._hdr_rows:
+            out += f"\x1b[2;{h}r"
+            self._hdr_rows = h
+        out += f"\x1b[1;1H\x1b[90m{self.header}\x1b[0m\x1b[K\x1b8"
+        try:
+            self.real.write(out)
+            self.real.flush()
+        except Exception:
+            pass
+
+    def after_clear(self):
+        """После очистки экрана: снова строка версии, курсор — на 2-ю строку."""
+        if not self.header:
+            return
+        with self.lock:
+            if TRUECOLOR:
+                self.pinned, self.lines = True, 0
+                self._draw_header(full=True)
+                self.real.write("\x1b[2;1H")
+            else:
+                self.real.write(self.header + "\n")
+            self.real.flush()
 
     def start(self):
         if TRUECOLOR and self._thr is None:
@@ -282,7 +337,7 @@ class _Console:
         if self._thr:
             self._thr.join(timeout=0.5)
         try:
-            self.real.write("\x1b[0m")
+            self.real.write("\x1b[0m" + ("\x1b[r" if self.pinned else ""))
             self.real.flush()
         except Exception:
             pass
@@ -317,6 +372,9 @@ class _Console:
             self.frame += 1
             blink_on = (self.frame // 12) % 2 == 0     # смена ~каждые 0.42 c
             h = self._term_lines()
+            if self.pinned and h != self._hdr_rows:
+                self._draw_header(full=True)        # окно изменило размер
+            h -= 1 if self.pinned else 0
             out = []
             for b in self.badges:
                 d = b["off"]
@@ -4136,6 +4194,9 @@ if __name__ == "__main__":
         selftest()
         sys.exit(0)
     try:
+        if "--version" not in sys.argv:
+            CON.set_header(f"HIK-Slots v{VERSION}")
+            cls()
         cleanup_after_update()
         if "--no-update" not in sys.argv:
             check_update()
