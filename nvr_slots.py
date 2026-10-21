@@ -67,7 +67,7 @@ from openpyxl.utils import get_column_letter
 
 # Версия программы. Обновление при запуске сравнивает её с последним
 # Release на GitHub и с этой же строкой в ветке main — берётся более новая.
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 REPO = "b3dniy/HIK-Slots"
 
 def _enable_vt():
@@ -4008,7 +4008,9 @@ def _download(url, dest, bar):
 
 
 def _restart(path):
-    """Новая версия в том же окне; эта копия завершается."""
+    """Новая версия — в этом же окне. Эта копия не закрывается, а ждёт её:
+    Windows Terminal закрывает вкладку вместе с процессом, которым она
+    открылась, и новая версия закрылась бы вместе со старой."""
     args = [a for a in sys.argv[1:] if a != "--no-update"]
     cmd = [path] + args if getattr(sys, "frozen", False) else [sys.executable, path] + args
     try:
@@ -4016,17 +4018,53 @@ def _restart(path):
     except Exception:
         pass
     sys.stdout.flush()
-    subprocess.Popen(cmd)
-    os._exit(0)
+    p = subprocess.Popen(cmd)
+    while True:
+        try:
+            code = p.wait()
+            break
+        except KeyboardInterrupt:      # Ctrl+C обрабатывает новая версия
+            continue
+    os._exit(code)
+
+
+OLD_PREFIX = "HIK-Slots-old-"
+
+
+def _set_hidden(path, hidden):
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x2 if hidden else 0x80)
+    except Exception:
+        pass
+
+
+def _park_old_exe(exe):
+    """Освободить имя работающего exe: Windows не даёт его удалить, но даёт
+    переместить. Переносим во временную папку (если она на том же диске),
+    иначе — скрытым файлом рядом. В папке программы копий не видно."""
+    tmp = os.path.join(os.environ.get("TEMP") or os.path.dirname(exe),
+                       f"{OLD_PREFIX}{os.getpid()}.exe")
+    try:
+        os.rename(exe, tmp)
+        return tmp
+    except OSError:
+        side = exe[:-4] + ".old.exe"
+        if os.path.exists(side):
+            os.remove(side)
+        os.rename(exe, side)
+        _set_hidden(side, True)
+        return side
 
 
 def apply_exe_update(exe, url, version, bar):
-    """Скачать новый exe, проверить его самопроверкой, перенести настройки
-    регистраторов (они внутри exe, в NTFS-потоке) и поставить на место старого.
-    Работающий exe Windows переименовать даёт — так и меняем."""
+    """Скачать новый exe (скрытым файлом), проверить его самопроверкой,
+    перенести настройки регистраторов (они внутри exe, в NTFS-потоке)
+    и поставить на место старого."""
     base = exe[:-4] if exe.lower().endswith(".exe") else exe
-    new, old = base + ".new.exe", base + ".old.exe"
+    new = base + ".new.exe"
     _download(url, new, bar)
+    _set_hidden(new, True)
     with open(new, "rb") as f:
         if f.read(2) != b"MZ":
             raise RuntimeError("скачан не exe-файл")
@@ -4041,14 +4079,14 @@ def apply_exe_update(exe, url, version, bar):
             f.write(cfg)
     except OSError:
         pass                          # настроек ещё не было
-    if os.path.exists(old):
-        os.remove(old)
-    os.rename(exe, old)
+    old = _park_old_exe(exe)
     try:
         os.rename(new, exe)
     except OSError:
         os.rename(old, exe)           # вернуть как было
+        _set_hidden(exe, False)
         raise
+    _set_hidden(exe, False)
 
 
 def apply_script_update(script, url, version, bar):
@@ -4109,25 +4147,35 @@ def check_update():
 
 
 def cleanup_after_update():
-    """Старый exe после обновления удаляется при следующем запуске
-    (пока старая копия работала, Windows его не отдавала)."""
+    """Убрать старые копии после обновления. Пока старая копия работает
+    (она ждёт новую), её файл занят — тогда уберётся при следующем запуске."""
     if not getattr(sys, "frozen", False):
         return
     base = sys.executable[:-4]
 
-    def clean():
-        for _ in range(20):
+    def clean(tries=20):
+        tmp = os.environ.get("TEMP") or ""
+        for _ in range(tries):
             left = 0
-            for p in (base + ".old.exe", base + ".new.exe"):
+            cands = [base + ".old.exe", base + ".new.exe"]
+            try:
+                cands += [os.path.join(tmp, n) for n in os.listdir(tmp)
+                          if n.startswith(OLD_PREFIX) and n.endswith(".exe")]
+            except OSError:
+                pass
+            for p in cands:
                 if os.path.exists(p):
                     try:
+                        _set_hidden(p, False)
                         os.remove(p)
                     except OSError:
                         left += 1
             if not left:
-                return
+                return True
             time.sleep(1)
-    threading.Thread(target=clean, daemon=True).start()
+        return False
+    if not clean(tries=1):                  # что-то ещё занято — добиваем в фоне
+        threading.Thread(target=clean, daemon=True).start()
 
 
 def selftest():
